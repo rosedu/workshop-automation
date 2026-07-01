@@ -78,58 +78,23 @@ git commit -m "Test broken code"
 
 Git will run the script, detect the compilation failure, and block the commit from being created.
 
-### Introductory exercise
-Before we tackle code formatting, let's build a simple hook to prevent
-us from accidentally committing unfinished work. We will write a script
-that searches for the word "TODO" in our files.
+### Do it yourself
 
-First, reset the repository:
+1. Reset the repository:
 
 ```bash
 ./gh-reset-repo.sh
 ```
 
-Navigate to the hooks directory and create the pre-commit file:
+2. Write your own hook to check for linter problems. Use the `clang-format` command:
 
 ```bash
-cd .git/hooks/
-touch pre-commit
-chmod +x pre-commit
+sudo apt update && sudo apt install -y clang-format
+# Run clang-format on our target C file.
+# --dry-run warns us about style violations without modifying the file.
+# -Werror forces it to return an error code if style violations are found.
+clang-format --dry-run -Werror c-bye/bye.c
 ```
-
-Open the pre-commit file and add the following bash script. It uses
-grep to search for "TODO" inside the `c-bye` directory:
-
-```bash
-#!/bin/bash
-echo "[Hook] Checking for forgotten TODOs..."
-
-# grep -r searches recursively; -q makes it quiet.
-if grep -r -q "TODO" c-bye/; then
-    echo "[Hook] You left a TODO in your code! Finish it before committing."
-    exit 1
-fi
-
-echo "[Hook] No TODOs found. Proceeding!"
-exit 0
-```
-
-Return to the repository root:
-
-```bash
-cd ../..
-```
-
-Test the hook by adding a TODO to your code and trying to commit:
-
-```bash
-echo "// TODO: Refactor this later" >> c-bye/bye.c
-git add c-bye/bye.c
-git commit -m "Add a temporary fix"
-```
-
-Git will block the commit. Remove the line manually from `bye.c`, add
-it again, and commit your changes!
 
 ### Using the `pre-commit` Framework
 
@@ -181,125 +146,6 @@ truncate -s 10M huge_file.txt
 git add huge_file.txt
 git commit -m "Added small file"
 ```
-
-### Pre-Commit Hooks
-
-We will look now at how to enforce coding standards via pre-commit
-hooks. We will write a custom hook that uses `clang-format` to block
-poorly formatted C code from being committed.
-
-First, reset the repository to ensure a clean state:
-
-```bash
-./gh-reset-repo.sh
-```
-
-Navigate to the hooks directory and create your executable hook:
-
-```bash
-cd .git/hooks/
-touch pre-commit
-chmod +x pre-commit
-```
-
-Open the pre-commit file and add the following bash script. It runs
-`clang-format` with the `-Werror` flag, which forces an exit code of 1
-if style violations are found:
-
-```bash
-#!/bin/bash
-echo "[Hook] Checking code formatting..."
-
-# Run clang-format in dry-run mode. It won't modify files, but will
-# fail if they are unformatted.
-clang-format --dry-run -Werror c-bye/bye.c
-
-# $? is the exit code of our previous command, clang-format
-if [ $? -ne 0 ]; then
-    echo "[Hook] Code is poorly formatted! Commit aborted."
-    echo "[Hook] Run 'clang-format -i c-bye/bye.c' to fix it automatically."
-    exit 1
-fi
-
-echo "[Hook] Code format check passed!"
-exit 0
-```
-
-Return to the repository root:
-
-```bash
-cd ../..
-```
-
-Now, intentionally mess up the formatting in `c-bye/bye.c` (for example
-add random spaces or misaligned brackets) and try to commit it:
-
-```bash
-git add c-bye/bye.c
-git commit -m "Test formatting hook with messy code"
-```
-
-Git will automatically run your script, detect the poor formatting, and
-block the commit. Now, fix the code automatically using the in-place
-`-i` flag, and successfully commit:
-
-```bash
-clang-format -i c-bye/bye.c
-git add c-bye/bye.c
-git commit -m "Add cleanly formatted C code"
-```
-
-### Hooks and Git Push
-Hooks aren't just for commits. Another incredibly useful hook is
-pre-push, which runs right before your code is sent to GitHub. Let's
-create a hook that ensures our code actually compiles before we are
-allowed to push it.
-
-Ensure you are in the repository root, then navigate to the `hooks`
-directory and create a pre-push file:
-
-```bash
-cd .git/hooks/
-touch pre-push
-chmod +x pre-push
-```
-
-Add the following script to compile the C program. If compilation
-fails, the push is aborted:
-
-```bash
-#!/bin/bash
-echo "[Hook] Verifying compilation before pushing..."
-
-# Attempt to compile
-gcc c-bye/bye.c -o c-bye/bye
-
-if [ $? -ne 0 ]; then
-    echo "[Hook] Code does not compile! Push aborted to protect the remote repository."
-    exit 1
-fi
-
-echo "[Hook] Code compiles cleanly. Pushing to GitHub..."
-rm -f c-bye/bye
-exit 0
-```
-
-Return to the repository root:
-
-```bash
-cd ../..
-```
-
-Test it by intentionally breaking `c-bye/bye.c` (i.e. delete a
-semicolon), committing it using `--no-verify` (to bypass the formatting
-hook from earlier), and attempting to push:
-
-```bash
-git commit -a -m "Introduce a compilation error" --no-verify
-git push upstream main
-```
-
-The push will fail, saving you from uploading broken code!
 
 ## 2. GitHub Actions: Continuous Integration (CI)
 
@@ -389,107 +235,6 @@ jobs:
 ```
 
 2. Create a CI workflow that checks for linter problems, as you did in the [hook](#automatically-verify-compilation) part of the workshop.
-
-### GitHub Actions
-Before setting up a linter, let's verify that we can spin up a virtual
-machine in the cloud and make it execute a simple command.
-
-First, reset the repository:
-
-```bash
-./gh-reset-repo.sh
-```
-
-Create a new directory for workflows and add a basic `.yaml` file:
-
-```bash
-mkdir -p .github/workflows
-touch .github/workflows/hello.yml
-```
-
-Add the following configuration. This workflow simply boots up an
-Ubuntu machine and prints a welcome message using GitHub's dynamic
-environment variables:
-
-```yaml
-name: Hello Cloud
-
-on: [push]
-
-jobs:
-  say-hello:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Print greeting
-        run: echo "Hello! This job was triggered by ${{ github.actor }}."
-```
-
-Push this to GitHub:
-
-```bash
-git add .github/workflows/hello.yml
-git commit -m "Add Hello Cloud workflow"
-git push upstream main
-```
-
-Open your repository on GitHub, go to the Actions tab, click on the
-`Hello Cloud` workflow, and look inside the `Print greeting` step to
-see your username printed by the cloud server!
-
-### Removing Hook Bypassing
-Local hooks are great, but developers can easily bypass them (i.e.
-using `git commit --no-verify`). To truly protect our codebase, we need
-a cloud-based linter that runs automatically on GitHub Actions.
-
-First, reset the repository:
-```bash
-./gh-reset-repo.sh
-```
-
-Create a new workflow file specifically for linting:
-```bash
-mkdir -p .github/workflows
-touch .github/workflows/lint.yml
-```
-
-Add the following configuration to `.github/workflows/lint.yml`. Notice
-how the steps mirror exactly what we executed manually on our local
-machine:
-
-```yaml
-name: Code Linter (CI)
-
-on: [push, pull_request]
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository code
-        uses: actions/checkout@v4
-
-      - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format
-
-      - name: Verify code formatting
-        run: clang-format --dry-run -Werror c-bye/bye.c
-```
-
-Commit and push your new pipeline to the cloud:
-```bash
-git add .github/workflows/lint.yml
-git commit -m "Add cloud linter workflow"
-git push upstream main
-```
-
-Test the automation: Intentionally break the formatting in `c-bye/bye.c`
-again, commit, and push the changes. Open your repository in a web
-browser, navigate to the Actions tab, and watch the pipeline catch the
-error and fail.
-Once you see the error message, run `clang-format -i c-bye/bye.c`
-locally, push the fix, and watch the pipeline work!
-
 
 ## 3. Containerization: Docker & GitHub Packages
 
@@ -596,145 +341,49 @@ In the `python3-hello/` directory, you already have a *Dockerfile*. Use it to cr
 
 Be creative! Try to create your own workflows.
 
-### CI Actions
-Continuous Integration isn't just about verifying code; it's also about
-packaging the results. If our C program compiles successfully in the
-cloud, we should save the compiled executable so users can download it
-directly from GitHub.
-We will update the `ci.yml` file you created earlier to upload the
-binary as an "Artifact".
-Open your existing `.github/workflows/ci.yml` and add a new step at the
-very bottom. Your final steps should look like this:
+## 4. Do It Yourself Challenges
 
-```yaml
-steps:
-      - name: Checkout repository code
-        uses: actions/checkout@v4
+### Challenge 1: The Secret Sentinel
 
-      - name: Install GCC
-        run: sudo apt-get update && sudo apt-get install -y gcc
+One of the most common security breaches happens when a developer accidentally pushes an AWS key or database password to a public GitHub repository. Bots scrape GitHub 24/7 looking for these leaked keys. You must stop the leak before the code ever leaves the developer's laptop.
 
-      - name: Compile C program
-        run: gcc c-bye/bye.c -o c-bye/bye_executable
+**Goal:** Write a custom local Git Hook that prevents you from accidentally committing passwords or secret API keys.
 
-      # New step: Save the binary to GitHub
-      - name: Upload Binary Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: compiled-program
-          path: c-bye/bye_executable
-```
+* Create a custom `pre-commit` Bash script (do not use the `.pre-commit-config.yaml` framework for this one; write the raw script).
+* The script must scan the staged changes (or the files directly) for the word `PASSWORD=`.
+* If the script finds the forbidden word, it must block the commit and print a clear, highly visible warning message to the terminal.
+* If the word is not found, the commit should proceed normally.
 
-Commit and push the update:
 
-```bash
-git add .github/workflows/ci.yml
-git commit -m "Add artifact upload to CI"
-git push upstream main
-```
+### Challenge 2: The Multi-Environment Matrix
 
-Navigate to the Actions tab on GitHub. Once the workflow completes, scroll to the bottom of the summary page. You will see an "Artifacts" section containing compiled-program.zip. You can now download the executable that the cloud just built!
+"It works on my machine" is a banned phrase in DevOps. Your users aren't all running the exact same version of Ubuntu that you are. A robust CI pipeline tests code across multiple environments (Windows, macOS, Linux) to ensure cross-platform compatibility.
 
-### Containers
-Before we containerize our own application, let's understand what lightweight containers do. We will pull and run *Alpine Linux*, a minimalist operating system that is only 5 MB in size, and execute a quick command inside it.
+**Goal:** Upgrade your existing GitHub Actions CI workflow to test the C program on multiple operating systems simultaneously.
 
-Make sure the Docker daemon is running on your machine, then execute this single line:
+* Modify your `.github/workflows/ci.yml` file.
+* Instead of just running on `ubuntu-latest`, the pipeline must spin up **three** different virtual machines simultaneously: `ubuntu-latest`, `macos-latest`, and `windows-latest`.
+* The C program must be compiled and executed successfully on all three operating systems.
 
-```bash
-docker run --rm alpine:latest echo "Hello from inside an isolated container!"
-```
 
-What just happened?
-1. Docker checked if you had the alpine:latest image locally.
-1. Since you didn't, it pulled (downloaded) it from the public Docker
-Hub.
-1. It created an isolated container using that image.
-1. It executed the echo command inside the container, printed to your
-terminal, and immediately deleted the container (--rm) when it finished.
+**Hints:**
+* You don't need to write three separate jobs. GitHub Actions has a built-in feature to handle this automatically.
+* Keep in mind that while `gcc` is standard on Linux, compiling C code on Windows might require a slightly different step, or the runner might already have a compiler installed. Check the logs if it fails!
 
-### Docker Containers and GitHub
-Let's containerize the C++ application `cpp-bye`, test it locally, and
-build an automated CD pipeline to publish it to the GitHub Container
-Registry.
 
-First, reset the repository:
-```bash
-./gh-reset-repo.sh
-```
+### Challenge 3: The Complete Pipeline
 
-Navigate to the C++ application directory. You will find a Dockerfile
-already prepared for you:
+A developer writes code. They try to commit it, and a local hook formats it. They push it to GitHub, and the CI server tests it. If the tests pass, the CD server packages it into a Docker image and publishes it to the registry. If any step fails, the pipeline stops, protecting production.
 
-```bash
-cd cpp-bye/
-```
+**Goal:** Create an end-to-end, zero-touch deployment pipeline for the `python3-hello` application using a Git Hook, a CI workflow, and a CD container push.
 
-Build the container image locally. The `-t` flag tags the image with a
-memorable local name (`cpp-bye-local`):
+1. **Local (Git Hook):** Set up the `pre-commit` framework (using `.pre-commit-config.yaml`) to run a Python linter (like `flake8` or `black`) on the `python3-hello` code. You must not be able to commit badly formatted Python code.
+2. **Cloud Testing (CI):** Create a *single* GitHub Actions YAML file named `python-pipeline.yml`. The first job in this file must be a `test` job that executes the Python script to ensure it doesn't crash.
+3. **Cloud Publishing (CD):** In that *same* YAML file, create a second job called `build-and-push`. This job must build the `python3-hello` Docker image and push it to GHCR.
+4. **The Golden Rule:** The `build-and-push` job **must not run** if the `test` job fails. It must wait for the tests to pass completely before attempting to build the container.
 
-```bash
-docker build -t cpp-bye-local .
-```
 
-Test the container to ensure it runs correctly and outputs its expected
-message on your machine:
-
-```bash
-docker run --rm cpp-bye-local
-```
-
-Now, let's automate this deployment. Return to the root of your
-repository and create a new workflow file:
-```bash
-cd ..
-touch .github/workflows/publish-cpp.yml
-```
-
-Add the following `.yaml` configuration. It uses the same
-authentication logic from the earlier tutorial but targets the
-`cpp-bye` directory as the build context:
-```yaml
-name: Publish C++ Docker Container
-
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository code
-        uses: actions/checkout@v4
-
-      - name: Authenticate with GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./cpp-bye
-          push: true
-          tags: ghcr.io/${{ github.repository }}/cpp-bye:latest
-```
-
-Push the setup to GitHub:
-```bash
-git add .github/workflows/publish-cpp.yml
-git commit -m "Add C++ Docker publish workflow"
-git push upstream main
-```
-
-Navigate to the Actions tab on GitHub to watch your image build. Once
-the workflow completes successfully, check the Packages section on the
-main page of your repository. You will see your newly published C++
-container, ready to be pulled via `docker pull`!
+**Hints:**
+* For the local step, search the `pre-commit` documentation for supported Python hooks. You'll need to point the YAML to the official GitHub repo of a tool like `black`.
+* By default, jobs in a GitHub Actions workflow run *in parallel*. To satisfy the "Golden Rule", you need to tell GitHub that the second job *depends* on the first one. Search the GitHub Actions docs for the `needs:` keyword.
+* You already have the Docker CD code from the workshop. Re-use it, but adapt the file paths to point to the `python3-hello` directory instead of the C application.
